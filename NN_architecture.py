@@ -1,4 +1,5 @@
-# This code defines the NN architecture for captioning
+# This code defines the GRU network architecture
+
 import matplotlib.pyplot as plt
 import tensorflow as tf
 import numpy as np
@@ -7,11 +8,11 @@ import os
 from PIL import Image
 from cache import cache
 import json
-from copy import copy
 
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.models import Model
 from tensorflow.python.keras.layers import Input, Dense, GRU, Embedding
+from tensorflow.python.keras.applications import VGG16
 from tensorflow.python.keras.optimizers import RMSprop
 from tensorflow.python.keras.callbacks import ModelCheckpoint, TensorBoard
 from tensorflow.python.keras.preprocessing.text import Tokenizer
@@ -23,35 +24,6 @@ from helpers import print_progress
 from captions_preprocess import TokenizerWrap
 from captions_preprocess import flatten
 from captions_preprocess import mark_captions
-
-# ONLY IMPORT DESIRED CNN MODEL
-#from tensorflow.python.keras.applications import VGG16
-#image_model = VGG16(include_top=True, weights='imagenet')
-#transfer_layer=image_model.get_layer('fc2')
-
-#from tensorflow.python.keras.applications import VGG19
-#image_model = VGG19(include_top=True, weights='imagenet')
-#transfer_layer=image_model.get_layer('fc2')
-
-#from tensorflow.python.keras.applications import ResNet50
-#image_model = ResNet50(include_top=True, weights='imagenet')
-#transfer_layer=image_model.get_layer('avg_pool')
-
-#from tensorflow.python.keras.applications import InceptionV3
-#image_model = InceptionV3(include_top=True, weights='imagenet')
-#transfer_layer=image_model.get_layer('avg_pool')
-
-# LOAD THE CORRECT TRANSFER VALUES
-# SPECIFY THE CNN, resnet50 or vgg
-transfer_values_train=np.load('image_features/transfer_values/ResNet50/transfer_values_train.npy')
-transfer_values_val=np.load('image_features/transfer_values/ResNet50/transfer_values_val.npy')
-transfer_values_test=np.load('image_features/transfer_values/ResNet50/transfer_values_test.npy')
-
-image_model_transfer = Model(inputs=image_model.input,
-                             outputs=transfer_layer.output)
-img_size=K.int_shape(image_model.input)[1:3]
-
-image_dir='../../Desktop/UAV/images/'
 
 # This function return a list of random token sequences
 # with the given indices in the training set
@@ -150,72 +122,6 @@ def batch_generator(batch_size):
         }
         
         yield (x_data, y_data)
-        
-def batch_generator_val(batch_size):
-    """
-    Generator function for creating random batches of validation-data.
-    
-    Note that it selects the data completely randomly for each
-    batch, corresponding to sampling of the training-set with
-    replacement. This means it is possible to sample the same
-    data multiple times within a single epoch - and it is also
-    possible that some data is not sampled at all within an epoch.
-    However, all the data should be unique within a single batch.
-    """
-
-    # Infinite loop.
-    while True:
-        # Get a list of random indices for images in the validation-set.
-        idx = np.random.randint(274,
-                                size=batch_size)
-        
-        # Get the pre-computed transfer-values for those images.
-        # These are the outputs of the pre-trained image-model.
-        transfer_values = transfer_values_val[idx]
-
-        # For each of the randomly chosen images there are
-        # at least 5 captions describing the contents of the image.
-        # Select one of those captions at random and get the
-        # associated sequence of integer-tokens.
-        tokens = get_random_caption_tokens(idx)
-
-        # Count the number of tokens in all these token-sequences.
-        num_tokens = [len(t) for t in tokens]
-        
-        # Max number of tokens.
-        max_tokens = np.max(num_tokens)
-        
-        # Pad all the other token-sequences with zeros
-        # so they all have the same length and can be
-        # input to the neural network as a numpy array.
-        tokens_padded = pad_sequences(tokens,
-                                      maxlen=max_tokens,
-                                      padding='post',
-                                      truncating='post')
-        
-        # Further prepare the token-sequences.
-        # The decoder-part of the neural network
-        # will try to map the token-sequences to
-        # themselves shifted one time-step.
-        decoder_input_data = tokens_padded[:, 0:-1]
-        decoder_output_data = tokens_padded[:, 1:]
-
-        # Dict for the input-data. Because we have
-        # several inputs, we use a named dict to
-        # ensure that the data is assigned correctly.
-        x_data = \
-        {
-            'decoder_input': decoder_input_data,
-            'transfer_values_input': transfer_values
-        }
-
-        # Dict for the output-data.
-        y_data = \
-        {
-            'decoder_output': decoder_output_data
-        }
-        
-        yield (x_data, y_data)
 
 # This connects all the layers of the decoder to some input of transfer-values
 def connect_decoder(transfer_values):
@@ -235,8 +141,6 @@ def connect_decoder(transfer_values):
     net = decoder_gru1(net, initial_state=initial_state)
     net = decoder_gru2(net, initial_state=initial_state)
     net = decoder_gru3(net, initial_state=initial_state)
-    net = decoder_gru4(net, initial_state=initial_state)
-    net = decoder_gru5(net, initial_state=initial_state)
 
     # Connect the final dense layer that converts to
     # one-hot encoded arrays.
@@ -272,21 +176,25 @@ def sparse_cross_entropy(y_true, y_pred):
 
     return loss_mean
 
+# This code is used to generate captions
+# the CNN model, as well as the image size, has to be specified
+image_model = VGG16(include_top=True, weights='imagenet')
+transfer_layer=image_model.get_layer('fc2')
+image_model_transfer = Model(inputs=image_model.input,
+                             outputs=transfer_layer.output)
+img_size=K.int_shape(image_model.input)[1:3]
 
 # recreate the tokenizer
 mark_start='ssss '
 mark_end=' eeee'
-captions_train=load_json('captions_train')
+captions_train=load_json('captions_train_saifullah')
 captions_train_marked=mark_captions(captions_train)
 captions_train_flat=flatten(captions_train_marked)
 tokenizer=TokenizerWrap(texts=captions_train_flat,
-                        num_words=166)
+                        num_words=167)
 token_start=tokenizer.word_index[mark_start.strip()]
 token_end=tokenizer.word_index[mark_end.strip()]
 tokens_train=tokenizer.captions_to_tokens(captions_train_marked)
-
-filenames_val=load_json('filenames_val')
-
 
 def generate_caption(image_path, max_tokens=30):
     """
@@ -296,8 +204,6 @@ def generate_caption(image_path, max_tokens=30):
 
     # Load and resize the image.
     image = load_image(image_path, size=img_size)
-    image=image[:,:,0:3]
-    
     
     # Expand the 3-dim numpy array to 4-dim
     # because the image-model expects a whole batch as input,
@@ -385,28 +291,13 @@ def generate_caption(image_path, max_tokens=30):
 #    print()
     return output_text.replace(" eeee","")
 
-def validation_check(verbose=0):
-#    Check on 100 images picked at random from validation set
-    val_captions=list()
-    for i in range(100):
-        idx=np.random.randint(0,294)
-        c=generate_caption(image_dir+filenames_val[idx])
-        val_captions.append(copy(c))
-        if verbose:
-            print_progress(i+1,100)
-    return val_captions
-
-# MODEL DEFINITION
-
-
-tokens_train=load_json('tokens_train')
-filenames_train=load_json('filenames_train')
+tokens_train=load_json('tokens_train_saifullah')
+filenames_train=load_json('filenames_train_saifullah')
+transfer_values_train=np.load('dataset/transfer_values_train_saifullah.npy')
 
 # This has to be tuned in order to not run out of memory
 batch_size = 64
 generator = batch_generator(batch_size=batch_size)
-generator_val = batch_generator_val(batch_size=batch_size)
-
 
 num_captions_train = [len(captions) for captions in captions_train]
 total_num_captions_train = np.sum(num_captions_train)
@@ -422,7 +313,7 @@ embedding_size=128
 # input the transfer values to the decoder
 # NOTE that the transfer values size depends on the chosen CNN
 # for VGG16, it's 4096
-transfer_values_size=transfer_values_train.shape[1]
+transfer_values_size=4096
 transfer_values_input = Input(shape=(transfer_values_size,),name='transfer_values_input')
 # tanh is needed to limit the mapping output between -1 and 1
 decoder_transfer_map = Dense(state_size,
@@ -432,7 +323,7 @@ decoder_transfer_map = Dense(state_size,
 decoder_input = Input(shape=(None, ), name='decoder_input')
 # embedding layer
 # converts sequences of tokens to sequences of vectors
-num_words=166
+num_words=167
 decoder_embedding = Embedding(input_dim=num_words,
                               output_dim=embedding_size,
                               name='decoder_embedding')
@@ -442,10 +333,6 @@ decoder_gru1 = GRU(state_size, name='decoder_gru1',
 decoder_gru2 = GRU(state_size, name='decoder_gru2',
                    return_sequences=True)
 decoder_gru3 = GRU(state_size, name='decoder_gru3',
-                   return_sequences=True)
-decoder_gru4 = GRU(state_size, name='decoder_gru4',
-                   return_sequences=True)
-decoder_gru5 = GRU(state_size, name='decoder_gru5',
                    return_sequences=True)
 # output of gru layers is a tensor of shape
 # [batch_size, sequence_length, state_size]
@@ -472,26 +359,45 @@ decoder_model.compile(optimizer=optimizer,
                       loss=sparse_cross_entropy,
                       target_tensors=[decoder_target])
 
-# save each epoch in a different checkpoint
-epoch_ctr=0
-def train_net(num_epochs,epoch_ctr=0):
-    eval_results=list()
-    for i in range(num_epochs):
-        path_checkpoint = str(epoch_ctr)+'_checkpoint.keras'
-        callback_checkpoint = ModelCheckpoint(filepath=path_checkpoint,
-                                              verbose=1,
-                                              save_weights_only=True)
-        callback_tensorboard = TensorBoard(log_dir='./logs_ResNet50/',
-                                           histogram_freq=0,
-                                           write_graph=False)
+# callback function to save checkpoints
+path_checkpoint = '22_checkpoint.keras'
+callback_checkpoint = ModelCheckpoint(filepath=path_checkpoint,
+                                      verbose=1,
+                                      save_weights_only=True)
+# callback to write the tensorboard log
+callback_tensorboard = TensorBoard(log_dir='./22_logs/',
+                                   histogram_freq=0,
+                                   write_graph=False)
+callbacks = [callback_checkpoint, callback_tensorboard]
 
-        callbacks = [callback_checkpoint, callback_tensorboard]
+# this is used to train from the last saved checkpoint
+try:
+    decoder_model.load_weights(path_checkpoint)
+except Exception as error:
+    print("Error trying to load checkpoint.")
+    print(error)
 
-        decoder_model.fit_generator(generator=generator,steps_per_epoch=steps_per_epoch,epochs=1,callbacks=callbacks)
-        evaluation=decoder_model.evaluate_generator(generator=generator_val,steps=200)
-        eval_results.append(evaluation)
-        print(evaluation)
-        epoch_ctr+=1
-    return eval_results
+# TO TRAIN THE NETWORK
+# in console run:
+#decoder_model.fit_generator(generator=generator,steps_per_epoch=steps_per_epoch,epochs=20,callbacks=callbacks)
 
-    
+
+# this function generates and saves the caption for the whole test set
+def bulk_generation():
+    filenames_test=load_json('filenames_test_saifullah')
+    path='../../../../Desktop/UAV/images/'
+    num_test_images=len(filenames_test)
+#    generated_captions=list()
+    f=open('generated_captions_saifullah.txt','w')
+    for i in range(num_test_images):
+        if i==884:
+#            image 884 (square_40) is corrupted
+            C=generate_caption(path+filenames_test[883])
+            f.writelines(C+'\n')
+            continue
+        C=generate_caption(path+filenames_test[i])
+#        generated_captions.append(C)
+        f.writelines(C+'\n')
+        progress=100*i/num_test_images
+        print(i, "Progress: %.2f" % progress)
+    f.close()

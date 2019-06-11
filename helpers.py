@@ -43,6 +43,7 @@ def load_image(path, size=None):
         path='../../../../Desktop/parsingDataset/RSICD_images/railwaystation_234.jpg'
 
     img = Image.open(path)
+ 
 
     # Resize image if desired.
     if not size is None:
@@ -50,6 +51,11 @@ def load_image(path, size=None):
 
     # Convert image to numpy array.
     img = np.array(img)
+
+
+# IF THERE IS A FOURTH CHANNEL, DELETE IT
+    if np.shape(img)[2]==4:
+        img=img[:,:,0:3]
 
     # Scale image-pixels so they fall between 0.0 and 1.0
     img = img / 255.0
@@ -67,7 +73,7 @@ def print_progress(count, max_count):
 
     # Status-message. Note the \r which means the line should
     # overwrite itself.
-    msg = "\r- Progress: {0:.3%}".format(pct_complete)
+    msg = "\r- Progress: {0:.1%}".format(pct_complete)
 
     # Print it.
     sys.stdout.write(msg)

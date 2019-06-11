@@ -19,7 +19,7 @@ def flatten(captions_listlist):
                   for caption in captions_list]
     return captions_list
 # to tokenize the captions
-num_words=166
+num_words=167
 class TokenizerWrap(Tokenizer):
     """Wrap the Tokenizer-class from Keras with more functionality."""
     
@@ -70,14 +70,14 @@ class TokenizerWrap(Tokenizer):
         
         return tokens
 # mark the training captions and flatten them
-captions_train=load_json('captions_train')
+captions_train=load_json('captions_train_saifullah')
 captions_train_marked=mark_captions(captions_train)
 captions_train_flat=flatten(captions_train_marked)
 tokenizer=TokenizerWrap(texts=captions_train_flat,
-                        num_words=166)
+                        num_words=2000)
 token_start=tokenizer.word_index[mark_start.strip()]
 token_end=tokenizer.word_index[mark_end.strip()]
 tokens_train=tokenizer.captions_to_tokens(captions_train_marked)
 
-with open('dataset/tokens_train.json','w') as outfile:
+with open('dataset/tokens_train_saifullah.json','w') as outfile:
     json.dump(tokens_train,outfile)
