@@ -6,18 +6,29 @@ from nltk import word_tokenize
 from nltk.translate.bleu_score import sentence_bleu
 from nltk.translate.bleu_score import corpus_bleu
 from nltk.translate.bleu_score import SmoothingFunction
+import json
 
 from helpers import load_json
 #from NN_architecture import generate_caption
 # run the NN architecture before
 captions_test=load_json('captions_test_saifullah')
 
-#generate_caption(path+filenames_test[0])
-with open('generated_captions_saifullah.txt') as inFile:
-    generated_test_captions=inFile.readlines()
-for i in range(len(generated_test_captions)):
-    generated_test_captions[i]=generated_test_captions[i][1:]
-    generated_test_captions[i]=generated_test_captions[i].replace('\n','')
+##generate_caption(path+filenames_test[0])
+##with open('generated_captions_VGG19.txt') as inFile:
+#with open('captions_vgg16/4_generated_captions_VGG16.txt') as inFile:
+#    generated_test_captions=inFile.readlines()
+#for i in range(len(generated_test_captions)):
+##    THIS LINE REMOVES THE FIRST EMPTY SPACE
+##    generated_test_captions[i]=generated_test_captions[i][1:]
+#    generated_test_captions[i]=generated_test_captions[i].replace('\n','')
+#
+
+# load from json
+with open('InceptionCaptions/9_greedy.json') as inFile:
+    generated_test_captions=json.load(inFile)
+#c_to_insert=generated_test_captions[883]
+#generated_test_captions.insert(884,c_to_insert)
+
 
 # build the references and candidate library
 num_samples=len(generated_test_captions)
@@ -33,37 +44,9 @@ for i in range(num_samples):
     candidates.append(C)
     references.append(refList)
 
-#def BLEU(references,candidate,order):
-#    if order==1:
-#        weights=[1,0,0,0]
-#    elif order==2:
-#        weights=[0.5,0.5,0,0]
-#    elif order==3:
-#        weights=[0.33,0.33,0.33,0]
-#    elif order==4:
-#        weights=[0.25,0.25,0.25,0.25]
-#    else:
-#        print('Invalid BLEU order')
-#        return
-#    score=sentence_bleu(references,candidate,weights)
-#    return score
-
-#score=sentence_bleu(references,candidate)
 score=list()
 
 chencherry=SmoothingFunction()
-
-#for i in range(1093):
-#    references=captions_test[i]
-#    references_tokenized=list()
-#    for i in range(len(references)):
-#        references_tokenized.append(nltk.word_tokenize(references[i]))
-#    candidate=generated_test_captions[i]
-#    candidate_tokenized=nltk.word_tokenize(candidate)
-#    s=sentence_bleu(references_tokenized,candidate_tokenized,weights=[1,0,0,0])
-#    score.append(s)
-#    
-
 
 # function to add the control tokens to the sentences
 def addCtrlSequence(string):
@@ -82,7 +65,7 @@ B3=list()
 B4=list()
 candidate_list=list()
 reference_list=list()
-for i in range(882):
+for i in range(num_samples):
     references=captions_test[i]
     references_tokenized=list()
     for j in range(len(references)):
@@ -90,9 +73,8 @@ for i in range(882):
 #        references_tokenized.append(nltk.word_tokenize(addCtrlSequence(references[j])))
 #        references_tokenized.append(nltk.word_tokenize(appendPeriod(references[j])))
         references_tokenized.append(nltk.word_tokenize(references[j]))
-#    candidate=generated_test_captions[i]
+    candidate=generated_test_captions[i]
 #    candidate=addCtrlSequence(generated_test_captions[i])
-#    candidate=addCtrlSequence(appendPeriod(generated_test_captions[i]))
     candidate=appendPeriod(generated_test_captions[i])
     candidate_tokenized=nltk.word_tokenize(candidate)
 #    s1=sentence_bleu(references_tokenized,candidate_tokenized,weights=[1,0,0,0])
@@ -107,10 +89,10 @@ for i in range(882):
     candidate_list.append(candidate_tokenized)
     reference_list.append(references_tokenized)
 
-corpus_B1=corpus_bleu(reference_list,candidate_list,weights=[1,0,0,0])
-corpus_B2=corpus_bleu(reference_list,candidate_list,weights=[0.5,0.5,0,0])
-corpus_B3=corpus_bleu(reference_list,candidate_list,weights=[0.33,0.33,0.33,0])
-corpus_B4=corpus_bleu(reference_list,candidate_list,weights=[0.25,0.25,0.25,0.25])
+corpus_B1=corpus_bleu(reference_list,candidate_list,weights=[1,0,0,0],smoothing_function=chencherry.method1)
+corpus_B2=corpus_bleu(reference_list,candidate_list,weights=[0.5,0.5,0,0],smoothing_function=chencherry.method2)
+corpus_B3=corpus_bleu(reference_list,candidate_list,weights=[0.33,0.33,0.33,0],smoothing_function=chencherry.method3)
+corpus_B4=corpus_bleu(reference_list,candidate_list,weights=[0.25,0.25,0.25,0.25],smoothing_function=chencherry.method4)
 
 print('BLEU1:',corpus_B1)
 print('BLEU2:',corpus_B2)
